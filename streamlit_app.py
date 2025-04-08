@@ -76,23 +76,26 @@ st.markdown(f'<p style="color:grey;">{default_prompt.format(keyword=keyword)}</p
 # 用户输入自定义任务
 user_prompt = st.text_area("如果你对于默认的任务不满意，可以输入自定义任务：", default_prompt.format(keyword=keyword), height=200)
 
-# 如果用户输入了自定义任务，则覆盖默认任务
-final_prompt = user_prompt if user_prompt != default_prompt.format(keyword=keyword) else default_prompt.format(keyword=keyword)
+
+# 创建一个按钮，用户点击后确认输入
+if st.button("确认"):
+    # 如果用户输入了自定义任务，则覆盖默认任务
+    final_prompt = user_prompt if user_prompt != default_prompt.format(keyword=keyword) else default_prompt.format(keyword=keyword)
 
 
 
-# # 用户输入自定义任务prompt
-# user_prompt = st.text_area("输入自定义任务", "", help="如果不输入，自定义任务将会覆盖默认任务")
+    # # 用户输入自定义任务prompt
+    # user_prompt = st.text_area("输入自定义任务", "", help="如果不输入，自定义任务将会覆盖默认任务")
 
-# # 判断是否有自定义任务
-# final_prompt = user_prompt if user_prompt else default_prompt
+    # # 判断是否有自定义任务
+    # final_prompt = user_prompt if user_prompt else default_prompt
 
-# 显示当前选择的任务prompt
-#st.write(f"最终任务提示: {final_prompt}")
+    # 显示当前选择的任务prompt
+    #st.write(f"最终任务提示: {final_prompt}")
 
-# 流式输出结果
-#st.write("正在生成任务...")
-# 这里你可以调用你的算法逻辑处理`keyword`和`final_prompt`，然后输出结果
-st.write(f"最终任务：{final_prompt} \n\n\n 针对关键词: {keyword} 的生成结果：")
+    # 流式输出结果
+    #st.write("正在生成任务...")
+    # 这里你可以调用你的算法逻辑处理`keyword`和`final_prompt`，然后输出结果
+    st.write(f"最终任务：{final_prompt} \n\n\n 针对关键词: {keyword} 的生成结果：")
 
 
