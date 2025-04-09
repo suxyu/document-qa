@@ -54,6 +54,18 @@
 
 
 import streamlit as st
+from mood_llm import get_prompts
+from openai import OpenAI
+import time
+from mood_llm import generate_custom_file_path
+from mood_llm import get_file_paths
+from mood_llm import extract_number_from_file_path
+from mood_llm import get_final_prompt
+import os
+
+# 配置OpenAI客户端
+client = OpenAI(base_url="https://dashscope.aliyuncs.com/compatible-mode/v1", api_key="sk-86a9b469ca3447e3ab60f6858591e7bf", timeout=100)
+
 
 # 默认的任务prompt
 default_prompt = "请根据给定的关键词生成相应的任务"
@@ -62,7 +74,7 @@ default_prompt = "请根据给定的关键词生成相应的任务"
 st.title("舆情分析POC")
 
 # 选择关键词
-keyword = st.selectbox("选择一个需要舆情分析的对象", ["杭州卷烟厂","烟草", "烟草行业", "香烟", "浙江中烟"])
+keyword = st.selectbox("选择一个需要舆情分析的对象", ["杭州卷烟厂","烟草",  "香烟", "浙江中烟"])
 
 # 默认任务prompt
 default_prompt = """默认的任务：找出所有直接针对 {keyword} 的负面 或者 正面的帖子或者评论,
@@ -97,5 +109,136 @@ if st.button("确认"):
     #st.write("正在生成任务...")
     # 这里你可以调用你的算法逻辑处理`keyword`和`final_prompt`，然后输出结果
     st.write(f"最终任务：{final_prompt} \n\n\n 针对关键词: {keyword} 的生成结果：")
+    print("final_prompt:",final_prompt)
+    print("keyword:",keyword)
+
+    prompts = get_prompts(final_prompt,keyword)
+
+    page_no =0
+    for prompt in prompts:
+        page_no +=1
+        messages = [{"role": "user", "content": prompt}]
+        response = client.chat.completions.create(
+            model="deepseek-r1-distill-qwen-32b",
+            messages=messages,
+            stream=True
+        )
+
+        # 初始化Streamlit的流式输出
+        #st.title("正在生成结果...")
+        response_placeholder = st.empty()  # 用于实时输出结果
+
+        # 初始化变量
+        reasoning_content = ""
+        content = ""
+        with st.spinner(f"正在筛选微博搜索 {keyword} 第{page_no}页 的相关内容..."):
+            with st.empty():
+                #st.write(f"正在筛选微博搜索 {keyword} 第{page_no}页 的相关内容...")
+                # 流式输出部分
+                for chunk in response:
+                    # 处理推理内容
+                    if chunk.choices[0].delta.reasoning_content:
+                        reasoning_content += chunk.choices[0].delta.reasoning_content
+                        response_placeholder.markdown(f"**推理过程：**\n{reasoning_content}")
+                    
+                    # 处理生成内容
+                    if chunk.choices[0].delta.content:
+                        content += chunk.choices[0].delta.content
+                        response_placeholder.markdown(f"**生成内容：**\n{content}")
+
+                    time.sleep(0.1)
+
+            response_placeholder.empty()  # 用于实时输出结果
+
+        st.empty()  # 清除之前的输出
+
+
+
+
+
+            
+        files_paths = get_file_paths(keyword)
+        file_path = files_paths[0]
+        p = extract_number_from_file_path(file_path)
+        file_path = generate_custom_file_path(file_path, f"temp_{keyword}_{p}.txt")
+
+        with open(file_path, 'w', encoding='utf-8') as temp_file:
+            temp_file.write(content)
+
+
+    final_prompt_full = get_final_prompt(final_prompt, keyword,pages="all",time_range="all")
+
+    
+    # 创建消息结构
+    messages = [{"role": "user", "content": final_prompt_full}]
+
+    # 进行OpenAI API请求并开启流式输出
+    response = client.chat.completions.create(
+        model="deepseek-r1-distill-qwen-32b",
+        messages=messages,
+        stream=True
+    )
+
+    # 初始化Streamlit的流式输出
+    st.title("信息筛选完成，综合分析全部相关信息的最终结果：")
+    response_placeholder = st.empty()  # 用于实时输出结果
+
+    # 初始化变量
+    reasoning_content = ""
+    content = ""
+
+    with st.empty():
+        # 流式输出部分
+        for chunk in response:
+            # 处理推理内容
+            if chunk.choices[0].delta.reasoning_content:
+                reasoning_content += chunk.choices[0].delta.reasoning_content
+                response_placeholder.markdown(f"**推理过程：**\n{reasoning_content}")
+            
+            # 处理生成内容
+            if chunk.choices[0].delta.content:
+                content += chunk.choices[0].delta.content
+                response_placeholder.markdown(f"**生成内容：**\n{content}")
+
+            time.sleep(0.1)
+
+    response_placeholder.empty()  # 用于实时输出结果
+
+    # 当推理内容流式输出完成后，停留在页面上
+    if reasoning_content:
+        st.markdown(f"**最终推理过程：**\n{reasoning_content}")
+
+    # 当生成内容流式输出完成后，停留在页面上
+    if content:
+        st.markdown(f"**最终生成内容：**\n{content}")
+
+
+    filtered_file_path = files_paths[0]
+    print(filtered_file_path)
+    def get_folder_path(file_path):
+        """
+        从文件路径中提取所在文件夹的相对路径。
+        
+        :param file_path: str, 文件的相对路径或绝对路径
+        :return: str, 文件夹的相对路径
+        """
+        return os.path.dirname(file_path)
+    
+    folder_path = get_folder_path(filtered_file_path)
+    print("folder_path:",folder_path)
+    temp_full_file_path = os.path.join("data", keyword, f"temp_{keyword}_full.txt")
+    print("temp_full_file_path:", temp_full_file_path)
+    
+    if os.path.exists(temp_full_file_path):
+        with open(temp_full_file_path, 'r', encoding='utf-8') as file:
+            full_content = file.read()
+            print("full_content:",full_content)
+            st.markdown(f"<h2>相关的微博帖子原文：</h2>\n{full_content}", unsafe_allow_html=True)
+    else:
+        st.error("未找到文件 temp_{keyword}_full.txt")
+
+
+    
+
 
 
